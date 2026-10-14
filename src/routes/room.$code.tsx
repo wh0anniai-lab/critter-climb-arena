@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import {
   buildMap,
-  CHARACTERS,
+
   drawBackground,
   drawCharacter,
   drawPlatform,
@@ -448,7 +448,6 @@ function Room() {
           <Link to="/" className="btn-chunky mt-5 inline-block bg-secondary text-xl text-secondary-foreground">처음으로</Link>
         </Overlay>
       )}
-      <span className="sr-only">{CHARACTERS.length}</span>
     </main>
   );
 }
