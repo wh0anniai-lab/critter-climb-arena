@@ -24,12 +24,12 @@ import { CharacterPreview } from "@/components/CharacterPreview";
 type Search = { name: string; char: CharId; host: boolean; map: MapId };
 
 export const Route = createFileRoute("/room/$code")({
-  validateSearch: (s: Record<string, unknown>): Search => ({
+  validateSearch: (raw: Record<string, unknown>): Search => { const s = raw as { name?: unknown; char?: unknown; host?: unknown; map?: unknown }; return {
     name: typeof s.name === "string" && s.name ? s.name.slice(0, 10) : "익명",
     char: (["cat", "dog", "hamster", "alien"].includes(s.char as string) ? s.char : "cat") as CharId,
     host: s.host === true || s.host === "true",
     map: s.map === "spooky" ? "spooky" : "cute",
-  }),
+  }; },
   head: ({ params }) => ({
     meta: [
       { title: `서버 ${params.code} — 꼭대기 점프 대작전` },
@@ -89,16 +89,16 @@ function Room() {
     });
     channelRef.current = ch;
     ch.on("presence", { event: "sync" }, () => {
-      const state = ch.presenceState<Meta>();
-      const list: Meta[] = Object.values(state).map((arr) => arr[0] as unknown as Meta).filter(Boolean);
+      const state = ch.presenceState();
+      const list: Meta[] = Object.values(state).map((arr) => arr[0] as unknown as Meta | undefined).filter((m): m is Meta => !!m);
       setPlayers(list);
-      const host = list.find((p) => p.host && p.map);
+      const host: Meta | undefined = list.find((p) => p.host && p.map);
       if (host) {
         setNotFound(false);
         setMapId((m) => m ?? host.map!);
         if (host.startAt) setStartAt((s) => s ?? host.startAt!);
       }
-      for (const id of remotes.current.keys()) if (!state[id]) remotes.current.delete(id);
+      for (const id of remotes.current.keys()) if (!(state as Record<string, unknown>)[id]) remotes.current.delete(id);
     });
     ch.on("broadcast", { event: "pos" }, ({ payload }) => {
       const p = payload as { id: string; x: number; y: number; f: number; m: boolean };
