@@ -234,9 +234,8 @@ export function drawBackground(
     const wx = r() * WORLD_W;
     const wy = r() * map.height;
     const kind = r();
-    // parallax
-    const y = camY + (wy - camY) * 0.6 + camY * 0 ;
-    const sy = ((y - camY * 0.4) % (viewH + 200) + viewH + 200) % (viewH + 200) + camY - 100;
+    const period = viewH + 200;
+    const sy = camY - 100 + ((((wy - camY * 0.5) % period) + period) % period);
     if (map.id === "cute") {
       if (kind < 0.5) {
         ctx.fillStyle = "rgba(255,255,255,0.85)";
