@@ -271,7 +271,7 @@ function Room() {
       ctx.setTransform(scale, 0, 0, scale, 0, -camY * scale);
       drawBackground(ctx, map, camY, viewH, t);
       for (let i = 0; i < map.platforms.length; i++) {
-        const p = map.platforms[i];
+        const p = map.platforms[i]!;
         if (p.y < camY - 100 || p.y > camY + viewH + 80) continue;
         drawPlatform(ctx, map, p, t, i === 0);
       }
@@ -303,7 +303,7 @@ function Room() {
         ctx.fillText(e.text, e.x, e.y - e.t * 40);
         ctx.globalAlpha = 1;
       }
-      for (let i = effects.length - 1; i >= 0; i--) if (effects[i].t > 0.7) effects.splice(i, 1);
+      for (let i = effects.length - 1; i >= 0; i--) if (effects[i]!.t > 0.7) effects.splice(i, 1);
 
       // HUD (screen space)
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -319,7 +319,7 @@ function Room() {
       ctx.fillText("⏱ " + formatTime(elapsed), 24, 44);
       ctx.font = "18px Jua, sans-serif";
       ctx.fillText(`밀치기 ${me.pushes}/${MAX_PUSHES}`, 24, 72);
-      const prog = 1 - (me.y - map.platforms[map.platforms.length - 1].y) / (map.height - 40 - map.platforms[map.platforms.length - 1].y);
+      const prog = 1 - (me.y - map.platforms[map.platforms.length - 1]!.y) / (map.height - 40 - map.platforms[map.platforms.length - 1]!.y);
       ctx.fillStyle = hudBg;
       ctx.beginPath(); ctx.roundRect(cw - 34, 12, 22, ch - 24, 11); ctx.fill();
       ctx.fillStyle = "#ff7ab0";
