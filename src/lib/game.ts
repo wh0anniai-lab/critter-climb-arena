@@ -330,7 +330,7 @@ export function drawPlatform(ctx: CanvasRenderingContext2D, map: MapData, p: Pla
     if (!ground) {
       const colors = ["#7ad3ff", "#ffe066", "#a98bff", "#7ee8a6"];
       for (let i = 10; i < p.w - 6; i += 16) {
-        ctx.fillStyle = colors[(i / 16 + (p.deco ?? 0)) % 4 | 0];
+        ctx.fillStyle = colors[(i / 16 + (p.deco ?? 0)) % 4 | 0] ?? "#ffffff";
         ctx.fillRect(p.x + i, p.y + 13, 6, 3);
       }
     }
