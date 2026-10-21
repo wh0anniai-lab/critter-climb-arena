@@ -421,6 +421,13 @@ function Room() {
   const diffInfo = DIFFICULTIES.find((d) => d.id === diffId);
   const isHost = search.host;
 
+  const holdKey = (keyCode: string, down: boolean) => {
+    const keys = keysRef.current;
+    if (!keys) return;
+    if (down) keys.add(keyCode);
+    else keys.delete(keyCode);
+  };
+
   return (
     <main className="relative h-screen w-full overflow-hidden">
       <canvas ref={canvasRef} className="block h-full w-full" />
