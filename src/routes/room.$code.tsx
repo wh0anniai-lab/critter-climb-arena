@@ -427,7 +427,20 @@ function Room() {
 
       <div className="card-chunky absolute right-14 top-3 w-56 p-3 text-base">
         <div className="font-display text-lg">서버 <span className="text-primary">{code}</span></div>
-        <div className="text-sm text-muted-foreground">{mapInfo?.name ?? "..."} · {players.length}명</div>
+        <div className="text-sm text-muted-foreground">{mapInfo?.name ?? "..."} · {diffInfo?.name ?? ""} · {players.length}명</div>
+        {startAt && !myFinish && liveRanks.length > 0 && (
+          <>
+            <div className="mt-2 font-display">🏁 실시간 순위</div>
+            <ul className="mt-1 space-y-1">
+              {liveRanks.slice(0, 5).map((p, i) => (
+                <li key={p.id} className="flex gap-1">
+                  <span>{["🥇", "🥈", "🥉"][i] ?? `${i + 1}.`}</span>
+                  <span className="truncate">{p.id === myId ? "⭐ " : ""}{p.name}</span>
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
         <ul className="mt-2 space-y-1">
           {players.map((p) => (
             <li key={p.id} className="flex justify-between gap-2">
@@ -436,6 +449,17 @@ function Room() {
             </li>
           ))}
         </ul>
+      </div>
+
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 flex items-end justify-between p-4" style={{ touchAction: "none" }}>
+        <div className="pointer-events-auto flex gap-3">
+          <TouchBtn label="◀" onHold={(down) => holdKey("KeyS", down)} />
+          <TouchBtn label="▶" onHold={(down) => holdKey("KeyD", down)} />
+        </div>
+        <div className="pointer-events-auto flex gap-3">
+          <TouchBtn label="👊" onTap={() => pushFnRef.current?.()} />
+          <TouchBtn label="⤒" big onHold={(down) => holdKey("Space", down)} />
+        </div>
       </div>
 
       {notFound && (
@@ -451,7 +475,7 @@ function Room() {
           <p className="text-muted-foreground">서버 이름</p>
           <h2 className="font-display text-6xl tracking-widest text-primary">{code}</h2>
           <p className="mt-1 text-muted-foreground">친구에게 이 번호를 알려주세요!</p>
-          <p className="mt-3 text-lg">맵: {mapInfo?.name ?? (connected ? "서버 찾는 중..." : "연결 중...")}</p>
+          <p className="mt-3 text-lg">맵: {mapInfo?.name ?? (connected ? "서버 찾는 중..." : "연결 중...")} · 난이도: {diffInfo?.name ?? "..."}</p>
           <div className="my-4 flex flex-wrap justify-center gap-3">
             {players.map((p) => (
               <div key={p.id} className="flex flex-col items-center">
@@ -469,6 +493,7 @@ function Room() {
           )}
           <p className="mt-4 text-sm text-muted-foreground">
             <span className="kbd">Space</span> 점프 · <span className="kbd">D</span> 앞 · <span className="kbd">S</span> 뒤 · <span className="kbd">A</span> 밀치기({MAX_PUSHES}번)
+            <br />화면 아래 버튼을 터치해도 돼요!
           </p>
         </Overlay>
       )}
@@ -490,6 +515,34 @@ function Room() {
         </Overlay>
       )}
     </main>
+  );
+}
+
+function holdKey(code: string, down: boolean) {
+  const keys = (holdKey as unknown as { keys?: Set<string> | null }).keys;
+  if (!keys) return;
+  if (down) keys.add(code);
+  else keys.delete(code);
+}
+
+function TouchBtn({ label, big, onHold, onTap }: { label: string; big?: boolean; onHold?: (down: boolean) => void; onTap?: () => void }) {
+  const cls = `btn-chunky select-none bg-card/90 font-display ${big ? "h-24 w-24 text-4xl" : "h-16 w-16 text-2xl"}`;
+  if (onTap) {
+    return (
+      <button type="button" className={cls} style={{ touchAction: "none" }}
+        onPointerDown={(e) => { e.preventDefault(); onTap(); }}>
+        {label}
+      </button>
+    );
+  }
+  return (
+    <button type="button" className={cls} style={{ touchAction: "none" }}
+      onPointerDown={(e) => { e.preventDefault(); (e.target as HTMLElement).setPointerCapture?.(e.pointerId); onHold?.(true); }}
+      onPointerUp={() => onHold?.(false)}
+      onPointerCancel={() => onHold?.(false)}
+      onLostPointerCapture={() => onHold?.(false)}>
+      {label}
+    </button>
   );
 }
 
