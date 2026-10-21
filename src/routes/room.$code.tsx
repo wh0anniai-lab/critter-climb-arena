@@ -15,26 +15,33 @@ import {
   MOVE_SPEED,
   PLAYER_SIZE,
   WORLD_W,
+  DIFFICULTIES,
   type CharId,
+  type DiffId,
   type MapData,
   type MapId,
 } from "@/lib/game";
 import { CharacterPreview } from "@/components/CharacterPreview";
 
-type Search = { name: string; char: CharId; host: boolean; map: MapId };
+const CHAR_IDS: CharId[] = ["cat", "dog", "hamster", "alien", "capybara", "axolotl", "rabbit"];
+const MAP_IDS: MapId[] = ["cute", "spooky", "jelly", "choco", "forest", "sea"];
+const DIFF_IDS: DiffId[] = ["easy", "normal", "hard"];
+
+type Search = { name: string; char: CharId; host: boolean; map: MapId; diff: DiffId };
 
 export const Route = createFileRoute("/room/$code")({
-  validateSearch: (raw: Record<string, unknown>): Search => { const s = raw as { name?: unknown; char?: unknown; host?: unknown; map?: unknown }; return {
+  validateSearch: (raw: Record<string, unknown>): Search => { const s = raw as { name?: unknown; char?: unknown; host?: unknown; map?: unknown; diff?: unknown }; return {
     name: typeof s.name === "string" && s.name ? s.name.slice(0, 10) : "익명",
-    char: (["cat", "dog", "hamster", "alien"].includes(s.char as string) ? s.char : "cat") as CharId,
+    char: (CHAR_IDS.includes(s.char as CharId) ? s.char : "cat") as CharId,
     host: s.host === true || s.host === "true",
-    map: s.map === "spooky" ? "spooky" : "cute",
+    map: (MAP_IDS.includes(s.map as MapId) ? s.map : "cute") as MapId,
+    diff: (DIFF_IDS.includes(s.diff as DiffId) ? s.diff : "normal") as DiffId,
   }; },
   head: ({ params }) => ({
     meta: [
-      { title: `서버 ${params.code} — 꼭대기 점프 대작전` },
+      { title: `서버 ${params.code} — 점프맵` },
       { name: "description", content: "친구들과 같은 서버에서 점프맵 꼭대기 레이스 중!" },
-      { property: "og:title", content: `서버 ${params.code} — 꼭대기 점프 대작전` },
+      { property: "og:title", content: `서버 ${params.code} — 점프맵` },
       { property: "og:description", content: "서버 번호를 입력하고 함께 달려요!" },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
@@ -49,6 +56,7 @@ interface Meta {
   char: CharId;
   host: boolean;
   map?: MapId;
+  diff?: DiffId;
   startAt?: number;
   finishTime?: number;
 }
@@ -64,13 +72,23 @@ function Room() {
 
   const [players, setPlayers] = useState<Meta[]>([]);
   const [mapId, setMapId] = useState<MapId | null>(search.host ? search.map : null);
+  const [diffId, setDiffId] = useState<DiffId | null>(search.host ? search.diff : null);
+  const [liveRanks, setLiveRanks] = useState<{ id: string; name: string; y: number }[]>([]);
   const [startAt, setStartAt] = useState<number | null>(null);
   const [notFound, setNotFound] = useState(false);
   const [myFinish, setMyFinish] = useState<number | null>(null);
   const [connected, setConnected] = useState(false);
 
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
-  const metaRef = useRef<Meta>({ id: myId, name: search.name, char: search.char, host: search.host, map: search.host ? search.map : undefined });
+  const metaRef = useRef<Meta>({
+    id: myId,
+    name: search.name,
+    char: search.char,
+    host: search.host,
+    ...(search.host ? { map: search.map, diff: search.diff } : {}),
+  });
+  const keysRef = useRef<Set<string> | null>(null);
+  const pushFnRef = useRef<(() => void) | null>(null);
   const remotes = useRef(new Map<string, Remote>());
   const playersRef = useRef<Meta[]>([]);
   const startRef = useRef<number | null>(null);
@@ -96,6 +114,7 @@ function Room() {
       if (host) {
         setNotFound(false);
         setMapId((m) => m ?? host.map!);
+        setDiffId((d) => d ?? host.diff ?? "normal");
         if (host.startAt) setStartAt((s) => s ?? host.startAt!);
       }
       for (const id of remotes.current.keys()) if (!(state as Record<string, unknown>)[id]) remotes.current.delete(id);
@@ -141,8 +160,8 @@ function Room() {
 
   // ---------- game loop ----------
   useEffect(() => {
-    if (!mapId) return;
-    const map: MapData = buildMap(mapId);
+    if (!mapId || !diffId) return;
+    const map: MapData = buildMap(mapId, diffId);
     const canvas = canvasRef.current!;
     const ctx = canvas.getContext("2d")!;
     const keys = new Set<string>();
@@ -173,6 +192,16 @@ function Room() {
     const ku = (e: KeyboardEvent) => keys.delete(e.code);
     window.addEventListener("keydown", kd);
     window.addEventListener("keyup", ku);
+    keysRef.current = keys;
+    pushFnRef.current = tryPush;
+    const rankTimer = window.setInterval(() => {
+      const ranks = playersRef.current.map((p) => {
+        const r = p.id === myId ? { y: me.y } : remotes.current.get(p.id);
+        return { id: p.id, name: p.name, y: r ? r.y : map.height };
+      });
+      ranks.sort((a, b) => a.y - b.y);
+      setLiveRanks(ranks);
+    }, 500);
 
     const playing = () => {
       const s = startRef.current;
@@ -248,6 +277,13 @@ function Room() {
               setMyFinish(time);
               metaRef.current = { ...metaRef.current, finishTime: time };
               channelRef.current?.track(metaRef.current);
+              void supabase.from("records").insert({
+                name: search.name,
+                char: search.char,
+                map: map.id,
+                diff: map.diff,
+                time_ms: time,
+              });
             }
             break;
           }
@@ -308,8 +344,9 @@ function Room() {
       // HUD (screen space)
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       const s = startRef.current;
-      const hudBg = mapId === "cute" ? "rgba(255,255,255,0.85)" : "rgba(30,20,50,0.75)";
-      const hudFg = mapId === "cute" ? "#5a3b74" : "#f3eaff";
+      const darkHud = mapId === "spooky" || mapId === "sea";
+      const hudBg = darkHud ? "rgba(30,20,50,0.75)" : "rgba(255,255,255,0.85)";
+      const hudFg = darkHud ? "#f3eaff" : "#5a3b74";
       ctx.fillStyle = hudBg;
       ctx.beginPath(); ctx.roundRect(12, 12, 190, 74, 14); ctx.fill();
       ctx.fillStyle = hudFg;
@@ -371,14 +408,25 @@ function Room() {
       cancelAnimationFrame(raf);
       window.removeEventListener("keydown", kd);
       window.removeEventListener("keyup", ku);
+      window.clearInterval(rankTimer);
+      keysRef.current = null;
+      pushFnRef.current = null;
     };
-  }, [mapId, myId, search.char, search.name]);
+  }, [mapId, diffId, myId, search.char, search.name]);
 
   const finishers = players
     .filter((p) => typeof p.finishTime === "number")
     .sort((a, b) => a.finishTime! - b.finishTime!);
   const mapInfo = MAPS.find((m) => m.id === mapId);
+  const diffInfo = DIFFICULTIES.find((d) => d.id === diffId);
   const isHost = search.host;
+
+  const holdKey = (keyCode: string, down: boolean) => {
+    const keys = keysRef.current;
+    if (!keys) return;
+    if (down) keys.add(keyCode);
+    else keys.delete(keyCode);
+  };
 
   return (
     <main className="relative h-screen w-full overflow-hidden">
@@ -386,7 +434,20 @@ function Room() {
 
       <div className="card-chunky absolute right-14 top-3 w-56 p-3 text-base">
         <div className="font-display text-lg">서버 <span className="text-primary">{code}</span></div>
-        <div className="text-sm text-muted-foreground">{mapInfo?.name ?? "..."} · {players.length}명</div>
+        <div className="text-sm text-muted-foreground">{mapInfo?.name ?? "..."} · {diffInfo?.name ?? ""} · {players.length}명</div>
+        {startAt && !myFinish && liveRanks.length > 0 && (
+          <>
+            <div className="mt-2 font-display">🏁 실시간 순위</div>
+            <ul className="mt-1 space-y-1">
+              {liveRanks.slice(0, 5).map((p, i) => (
+                <li key={p.id} className="flex gap-1">
+                  <span>{["🥇", "🥈", "🥉"][i] ?? `${i + 1}.`}</span>
+                  <span className="truncate">{p.id === myId ? "⭐ " : ""}{p.name}</span>
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
         <ul className="mt-2 space-y-1">
           {players.map((p) => (
             <li key={p.id} className="flex justify-between gap-2">
@@ -395,6 +456,17 @@ function Room() {
             </li>
           ))}
         </ul>
+      </div>
+
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 flex items-end justify-between p-4" style={{ touchAction: "none" }}>
+        <div className="pointer-events-auto flex gap-3">
+          <TouchBtn label="◀" onHold={(down) => holdKey("KeyS", down)} />
+          <TouchBtn label="▶" onHold={(down) => holdKey("KeyD", down)} />
+        </div>
+        <div className="pointer-events-auto flex gap-3">
+          <TouchBtn label="👊" onTap={() => pushFnRef.current?.()} />
+          <TouchBtn label="⤒" big onHold={(down) => holdKey("Space", down)} />
+        </div>
       </div>
 
       {notFound && (
@@ -410,7 +482,7 @@ function Room() {
           <p className="text-muted-foreground">서버 이름</p>
           <h2 className="font-display text-6xl tracking-widest text-primary">{code}</h2>
           <p className="mt-1 text-muted-foreground">친구에게 이 번호를 알려주세요!</p>
-          <p className="mt-3 text-lg">맵: {mapInfo?.name ?? (connected ? "서버 찾는 중..." : "연결 중...")}</p>
+          <p className="mt-3 text-lg">맵: {mapInfo?.name ?? (connected ? "서버 찾는 중..." : "연결 중...")} · 난이도: {diffInfo?.name ?? "..."}</p>
           <div className="my-4 flex flex-wrap justify-center gap-3">
             {players.map((p) => (
               <div key={p.id} className="flex flex-col items-center">
@@ -428,6 +500,7 @@ function Room() {
           )}
           <p className="mt-4 text-sm text-muted-foreground">
             <span className="kbd">Space</span> 점프 · <span className="kbd">D</span> 앞 · <span className="kbd">S</span> 뒤 · <span className="kbd">A</span> 밀치기({MAX_PUSHES}번)
+            <br />화면 아래 버튼을 터치해도 돼요!
           </p>
         </Overlay>
       )}
@@ -449,6 +522,34 @@ function Room() {
         </Overlay>
       )}
     </main>
+  );
+}
+
+function holdKey(code: string, down: boolean) {
+  const keys = (holdKey as unknown as { keys?: Set<string> | null }).keys;
+  if (!keys) return;
+  if (down) keys.add(code);
+  else keys.delete(code);
+}
+
+function TouchBtn({ label, big, onHold, onTap }: { label: string; big?: boolean; onHold?: (down: boolean) => void; onTap?: () => void }) {
+  const cls = `btn-chunky select-none bg-card/90 font-display ${big ? "h-24 w-24 text-4xl" : "h-16 w-16 text-2xl"}`;
+  if (onTap) {
+    return (
+      <button type="button" className={cls} style={{ touchAction: "none" }}
+        onPointerDown={(e) => { e.preventDefault(); onTap(); }}>
+        {label}
+      </button>
+    );
+  }
+  return (
+    <button type="button" className={cls} style={{ touchAction: "none" }}
+      onPointerDown={(e) => { e.preventDefault(); (e.target as HTMLElement).setPointerCapture?.(e.pointerId); onHold?.(true); }}
+      onPointerUp={() => onHold?.(false)}
+      onPointerCancel={() => onHold?.(false)}
+      onLostPointerCapture={() => onHold?.(false)}>
+      {label}
+    </button>
   );
 }
 
