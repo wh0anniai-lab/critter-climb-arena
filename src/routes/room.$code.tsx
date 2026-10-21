@@ -277,7 +277,8 @@ function Room() {
               setMyFinish(time);
               metaRef.current = { ...metaRef.current, finishTime: time };
               channelRef.current?.track(metaRef.current);
-              void supabase.from("records").insert({
+              const db = supabase as unknown as { from: (t: string) => { insert: (v: Record<string, unknown>) => Promise<unknown> } };
+              void db.from("records").insert({
                 name: search.name,
                 char: search.char,
                 map: map.id,
@@ -523,13 +524,6 @@ function Room() {
       )}
     </main>
   );
-}
-
-function holdKey(code: string, down: boolean) {
-  const keys = (holdKey as unknown as { keys?: Set<string> | null }).keys;
-  if (!keys) return;
-  if (down) keys.add(code);
-  else keys.delete(code);
 }
 
 function TouchBtn({ label, big, onHold, onTap }: { label: string; big?: boolean; onHold?: (down: boolean) => void; onTap?: () => void }) {
