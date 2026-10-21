@@ -15,6 +15,7 @@ import {
   MOVE_SPEED,
   PLAYER_SIZE,
   WORLD_W,
+  DIFFICULTIES,
   type CharId,
   type DiffId,
   type MapData,
@@ -38,9 +39,9 @@ export const Route = createFileRoute("/room/$code")({
   }; },
   head: ({ params }) => ({
     meta: [
-      { title: `서버 ${params.code} — 꼭대기 점프 대작전` },
+      { title: `서버 ${params.code} — 점프맵` },
       { name: "description", content: "친구들과 같은 서버에서 점프맵 꼭대기 레이스 중!" },
-      { property: "og:title", content: `서버 ${params.code} — 꼭대기 점프 대작전` },
+      { property: "og:title", content: `서버 ${params.code} — 점프맵` },
       { property: "og:description", content: "서버 번호를 입력하고 함께 달려요!" },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
@@ -343,8 +344,9 @@ function Room() {
       // HUD (screen space)
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       const s = startRef.current;
-      const hudBg = mapId === "cute" ? "rgba(255,255,255,0.85)" : "rgba(30,20,50,0.75)";
-      const hudFg = mapId === "cute" ? "#5a3b74" : "#f3eaff";
+      const darkHud = mapId === "spooky" || mapId === "sea";
+      const hudBg = darkHud ? "rgba(30,20,50,0.75)" : "rgba(255,255,255,0.85)";
+      const hudFg = darkHud ? "#f3eaff" : "#5a3b74";
       ctx.fillStyle = hudBg;
       ctx.beginPath(); ctx.roundRect(12, 12, 190, 74, 14); ctx.fill();
       ctx.fillStyle = hudFg;
@@ -416,6 +418,7 @@ function Room() {
     .filter((p) => typeof p.finishTime === "number")
     .sort((a, b) => a.finishTime! - b.finishTime!);
   const mapInfo = MAPS.find((m) => m.id === mapId);
+  const diffInfo = DIFFICULTIES.find((d) => d.id === diffId);
   const isHost = search.host;
 
   return (
