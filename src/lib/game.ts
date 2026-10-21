@@ -246,7 +246,6 @@ export function drawCharacter(
     // flat snout
     ctx.beginPath();
     ctx.ellipse(cx + facing * r * 0.25, cy + r * 0.25, r * 0.55, r * 0.4, 0, 0, Math.PI * 2);
-    ctx.fillStyle = "#c999645";
     ctx.fillStyle = "#c99964";
     ctx.fill();
     // sleepy eyes
@@ -433,9 +432,9 @@ export function drawBackground(
     } else {
       // sea
       if (kind < 0.45) {
-        const by = sy - ((t * 30 + i * 53) % (viewH + 200));
-        circle(ctx, wx, by + viewH + 100 - viewH, 3 + kind * 8, "rgba(255,255,255,0.35)");
-        circle(ctx, wx - 1, by + viewH - 1 - 100 + 100, 1.5, "rgba(255,255,255,0.5)");
+        const by = camY + viewH + 40 - ((t * 30 + i * 53 + wy) % (viewH + 180));
+        circle(ctx, wx, by, 3 + kind * 8, "rgba(255,255,255,0.35)");
+        circle(ctx, wx - 1, by - 1, 1.5, "rgba(255,255,255,0.5)");
       } else if (kind < 0.75) {
         fish(ctx, wx + Math.sin(t * 0.9 + i) * 40, sy, 12 + kind * 8, i % 2 === 0 ? 1 : -1, i);
       } else {
