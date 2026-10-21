@@ -16,19 +16,25 @@ import {
   PLAYER_SIZE,
   WORLD_W,
   type CharId,
+  type DiffId,
   type MapData,
   type MapId,
 } from "@/lib/game";
 import { CharacterPreview } from "@/components/CharacterPreview";
 
-type Search = { name: string; char: CharId; host: boolean; map: MapId };
+const CHAR_IDS: CharId[] = ["cat", "dog", "hamster", "alien", "capybara", "axolotl", "rabbit"];
+const MAP_IDS: MapId[] = ["cute", "spooky", "jelly", "choco", "forest", "sea"];
+const DIFF_IDS: DiffId[] = ["easy", "normal", "hard"];
+
+type Search = { name: string; char: CharId; host: boolean; map: MapId; diff: DiffId };
 
 export const Route = createFileRoute("/room/$code")({
-  validateSearch: (raw: Record<string, unknown>): Search => { const s = raw as { name?: unknown; char?: unknown; host?: unknown; map?: unknown }; return {
+  validateSearch: (raw: Record<string, unknown>): Search => { const s = raw as { name?: unknown; char?: unknown; host?: unknown; map?: unknown; diff?: unknown }; return {
     name: typeof s.name === "string" && s.name ? s.name.slice(0, 10) : "익명",
-    char: (["cat", "dog", "hamster", "alien"].includes(s.char as string) ? s.char : "cat") as CharId,
+    char: (CHAR_IDS.includes(s.char as CharId) ? s.char : "cat") as CharId,
     host: s.host === true || s.host === "true",
-    map: s.map === "spooky" ? "spooky" : "cute",
+    map: (MAP_IDS.includes(s.map as MapId) ? s.map : "cute") as MapId,
+    diff: (DIFF_IDS.includes(s.diff as DiffId) ? s.diff : "normal") as DiffId,
   }; },
   head: ({ params }) => ({
     meta: [
