@@ -55,6 +55,7 @@ interface Meta {
   char: CharId;
   host: boolean;
   map?: MapId;
+  diff?: DiffId;
   startAt?: number;
   finishTime?: number;
 }
@@ -70,13 +71,23 @@ function Room() {
 
   const [players, setPlayers] = useState<Meta[]>([]);
   const [mapId, setMapId] = useState<MapId | null>(search.host ? search.map : null);
+  const [diffId, setDiffId] = useState<DiffId | null>(search.host ? search.diff : null);
+  const [liveRanks, setLiveRanks] = useState<{ id: string; name: string; y: number }[]>([]);
   const [startAt, setStartAt] = useState<number | null>(null);
   const [notFound, setNotFound] = useState(false);
   const [myFinish, setMyFinish] = useState<number | null>(null);
   const [connected, setConnected] = useState(false);
 
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
-  const metaRef = useRef<Meta>({ id: myId, name: search.name, char: search.char, host: search.host, map: search.host ? search.map : undefined });
+  const metaRef = useRef<Meta>({
+    id: myId,
+    name: search.name,
+    char: search.char,
+    host: search.host,
+    ...(search.host ? { map: search.map, diff: search.diff } : {}),
+  });
+  const keysRef = useRef<Set<string> | null>(null);
+  const pushFnRef = useRef<(() => void) | null>(null);
   const remotes = useRef(new Map<string, Remote>());
   const playersRef = useRef<Meta[]>([]);
   const startRef = useRef<number | null>(null);
@@ -102,6 +113,7 @@ function Room() {
       if (host) {
         setNotFound(false);
         setMapId((m) => m ?? host.map!);
+        setDiffId((d) => d ?? host.diff ?? "normal");
         if (host.startAt) setStartAt((s) => s ?? host.startAt!);
       }
       for (const id of remotes.current.keys()) if (!(state as Record<string, unknown>)[id]) remotes.current.delete(id);
