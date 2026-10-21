@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { CHARACTERS, MAPS, type CharId, type MapId } from "@/lib/game";
+import { CHARACTERS, MAPS, type CharId, type DiffId, type MapId } from "@/lib/game";
 import { CharacterPreview } from "@/components/CharacterPreview";
 import cuteImg from "@/assets/map-cute.jpg";
 import spookyImg from "@/assets/map-spooky.jpg";
@@ -42,13 +42,13 @@ function Index() {
   const create = () => {
     save();
     const c = String(Math.floor(1000 + Math.random() * 9000));
-    navigate({ to: "/room/$code", params: { code: c }, search: { name: finalName, char, host: true, map } });
+    navigate({ to: "/room/$code", params: { code: c }, search: { name: finalName, char, host: true, map, diff: "normal" as DiffId } });
   };
   const join = () => {
     const c = code.trim();
     if (!c) return;
     save();
-    navigate({ to: "/room/$code", params: { code: c }, search: { name: finalName, char, host: false, map: "cute" } });
+    navigate({ to: "/room/$code", params: { code: c }, search: { name: finalName, char, host: false, map: "cute", diff: "normal" as DiffId } });
   };
 
   return (
