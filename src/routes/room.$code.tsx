@@ -159,8 +159,8 @@ function Room() {
 
   // ---------- game loop ----------
   useEffect(() => {
-    if (!mapId) return;
-    const map: MapData = buildMap(mapId);
+    if (!mapId || !diffId) return;
+    const map: MapData = buildMap(mapId, diffId);
     const canvas = canvasRef.current!;
     const ctx = canvas.getContext("2d")!;
     const keys = new Set<string>();
@@ -191,6 +191,16 @@ function Room() {
     const ku = (e: KeyboardEvent) => keys.delete(e.code);
     window.addEventListener("keydown", kd);
     window.addEventListener("keyup", ku);
+    keysRef.current = keys;
+    pushFnRef.current = tryPush;
+    const rankTimer = window.setInterval(() => {
+      const ranks = playersRef.current.map((p) => {
+        const r = p.id === myId ? { y: me.y } : remotes.current.get(p.id);
+        return { id: p.id, name: p.name, y: r ? r.y : map.height };
+      });
+      ranks.sort((a, b) => a.y - b.y);
+      setLiveRanks(ranks);
+    }, 500);
 
     const playing = () => {
       const s = startRef.current;
@@ -266,6 +276,13 @@ function Room() {
               setMyFinish(time);
               metaRef.current = { ...metaRef.current, finishTime: time };
               channelRef.current?.track(metaRef.current);
+              void supabase.from("records").insert({
+                name: search.name,
+                char: search.char,
+                map: map.id,
+                diff: map.diff,
+                time_ms: time,
+              });
             }
             break;
           }
@@ -389,8 +406,11 @@ function Room() {
       cancelAnimationFrame(raf);
       window.removeEventListener("keydown", kd);
       window.removeEventListener("keyup", ku);
+      window.clearInterval(rankTimer);
+      keysRef.current = null;
+      pushFnRef.current = null;
     };
-  }, [mapId, myId, search.char, search.name]);
+  }, [mapId, diffId, myId, search.char, search.name]);
 
   const finishers = players
     .filter((p) => typeof p.finishTime === "number")
