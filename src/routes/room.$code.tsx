@@ -22,6 +22,9 @@ import {
   type MapId,
 } from "@/lib/game";
 import { CharacterPreview } from "@/components/CharacterPreview";
+import { Button } from "@/components/ui/button";
+import { LogOut } from "lucide-react";
+import { MAP_IMAGES } from "@/lib/map-images";
 
 const CHAR_IDS: CharId[] = ["cat", "dog", "hamster", "alien", "capybara", "axolotl", "rabbit"];
 const MAP_IDS: MapId[] = ["cute", "spooky", "jelly", "choco", "forest", "sea"];
@@ -78,6 +81,8 @@ function Room() {
   const [notFound, setNotFound] = useState(false);
   const [myFinish, setMyFinish] = useState<number | null>(null);
   const [connected, setConnected] = useState(false);
+  const [leaving, setLeaving] = useState(false);
+  const [recordError, setRecordError] = useState(false);
 
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const metaRef = useRef<Meta>({
@@ -113,9 +118,11 @@ function Room() {
       const host: Meta | undefined = list.find((p) => p.host && p.map);
       if (host) {
         setNotFound(false);
-        setMapId((m) => m ?? host.map!);
+        const hostMap = host.map;
+        if (hostMap) setMapId((m) => m ?? hostMap);
         setDiffId((d) => d ?? host.diff ?? "normal");
-        if (host.startAt) setStartAt((s) => s ?? host.startAt!);
+        const hostStart = host.startAt;
+        if (hostStart) setStartAt((s) => s ?? hostStart);
       }
       for (const id of remotes.current.keys()) if (!(state as Record<string, unknown>)[id]) remotes.current.delete(id);
     });
@@ -151,7 +158,9 @@ function Room() {
   }, [search.host, mapId]);
 
   const startGame = async () => {
+    if (!search.host || !connected || startRef.current !== null) return;
     const at = Date.now() + 3000;
+    startRef.current = at;
     setStartAt(at);
     metaRef.current = { ...metaRef.current, startAt: at };
     await channelRef.current?.track(metaRef.current);
@@ -162,8 +171,13 @@ function Room() {
   useEffect(() => {
     if (!mapId || !diffId) return;
     const map: MapData = buildMap(mapId, diffId);
-    const canvas = canvasRef.current!;
-    const ctx = canvas.getContext("2d")!;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const context = canvas.getContext("2d");
+    if (!context) return;
+    const ctx: CanvasRenderingContext2D = context;
+    const scenery = new Image();
+    scenery.src = MAP_IMAGES[mapId];
     const keys = new Set<string>();
     const me = {
       x: 80 + Math.random() * (WORLD_W - 160),
@@ -221,7 +235,8 @@ function Room() {
         if (d < bestD) { bestD = d; best = id; }
       }
       if (best) {
-        const r = remotes.current.get(best)!;
+        const r = remotes.current.get(best);
+        if (!r) return;
         const dir = r.x >= me.x ? 1 : -1;
         channelRef.current?.send({ type: "broadcast", event: "push", payload: { target: best, dir } });
         effects.push({ x: (r.x + me.x) / 2, y: me.y - PLAYER_SIZE, t: 0, text: "퍽!" });
@@ -277,14 +292,13 @@ function Room() {
               setMyFinish(time);
               metaRef.current = { ...metaRef.current, finishTime: time };
               channelRef.current?.track(metaRef.current);
-              const db = supabase as unknown as { from: (t: string) => { insert: (v: Record<string, unknown>) => Promise<unknown> } };
-              void db.from("records").insert({
+              void supabase.from("records").insert({
                 name: search.name,
                 char: search.char,
                 map: map.id,
                 diff: map.diff,
                 time_ms: time,
-              });
+              }).then(({ error }) => { if (error) setRecordError(true); });
             }
             break;
           }
@@ -307,8 +321,14 @@ function Room() {
 
       ctx.setTransform(scale, 0, 0, scale, 0, -camY * scale);
       drawBackground(ctx, map, camY, viewH, t);
+      if (scenery.complete && scenery.naturalWidth > 0) {
+        ctx.globalAlpha = 0.25;
+        ctx.drawImage(scenery, 0, camY, WORLD_W, viewH);
+        ctx.globalAlpha = 1;
+      }
       for (let i = 0; i < map.platforms.length; i++) {
-        const p = map.platforms[i]!;
+        const p = map.platforms[i];
+        if (!p) continue;
         if (p.y < camY - 100 || p.y > camY + viewH + 80) continue;
         drawPlatform(ctx, map, p, t, i === 0);
       }
@@ -340,7 +360,7 @@ function Room() {
         ctx.fillText(e.text, e.x, e.y - e.t * 40);
         ctx.globalAlpha = 1;
       }
-      for (let i = effects.length - 1; i >= 0; i--) if (effects[i]!.t > 0.7) effects.splice(i, 1);
+      for (let i = effects.length - 1; i >= 0; i--) if ((effects[i]?.t ?? 0) > 0.7) effects.splice(i, 1);
 
       // HUD (screen space)
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -357,7 +377,7 @@ function Room() {
       ctx.fillText("⏱ " + formatTime(elapsed), 24, 44);
       ctx.font = "18px Jua, sans-serif";
       ctx.fillText(`밀치기 ${me.pushes}/${MAX_PUSHES}`, 24, 72);
-      const prog = 1 - (me.y - map.platforms[map.platforms.length - 1]!.y) / (map.height - 40 - map.platforms[map.platforms.length - 1]!.y);
+      const prog = 1 - (me.y - (map.platforms.at(-1)?.y ?? 360)) / (map.height - 40 - (map.platforms.at(-1)?.y ?? 360));
       ctx.fillStyle = hudBg;
       ctx.beginPath(); ctx.roundRect(cw - 34, 12, 22, ch - 24, 11); ctx.fill();
       ctx.fillStyle = "#ff7ab0";
@@ -417,7 +437,7 @@ function Room() {
 
   const finishers = players
     .filter((p) => typeof p.finishTime === "number")
-    .sort((a, b) => a.finishTime! - b.finishTime!);
+    .sort((a, b) => (a.finishTime ?? Infinity) - (b.finishTime ?? Infinity));
   const mapInfo = MAPS.find((m) => m.id === mapId);
   const diffInfo = DIFFICULTIES.find((d) => d.id === diffId);
   const isHost = search.host;
@@ -430,10 +450,11 @@ function Room() {
   };
 
   return (
-    <main className="relative h-screen w-full overflow-hidden">
-      <canvas ref={canvasRef} className="block h-full w-full" />
+    <main className="relative h-dvh w-full overflow-hidden touch-none">
+      <canvas ref={canvasRef} aria-label="점프맵 경주 화면" className="block h-full w-full" />
+      <Button variant="outline" onClick={() => setLeaving(true)} className="btn-chunky absolute left-3 top-24 z-10 h-auto bg-card text-base"><LogOut />나가기</Button>
 
-      <div className="card-chunky absolute right-14 top-3 w-56 p-3 text-base">
+      <div className="card-chunky absolute right-12 top-3 max-h-[40dvh] w-40 overflow-y-auto p-3 text-base sm:w-56">
         <div className="font-display text-lg">서버 <span className="text-primary">{code}</span></div>
         <div className="text-sm text-muted-foreground">{mapInfo?.name ?? "..."} · {diffInfo?.name ?? ""} · {players.length}명</div>
         {startAt && !myFinish && liveRanks.length > 0 && (
@@ -443,7 +464,8 @@ function Room() {
               {liveRanks.slice(0, 5).map((p, i) => (
                 <li key={p.id} className="flex gap-1">
                   <span>{["🥇", "🥈", "🥉"][i] ?? `${i + 1}.`}</span>
-                  <span className="truncate">{p.id === myId ? "⭐ " : ""}{p.name}</span>
+                  <span className="min-w-0 flex-1 truncate">{p.id === myId ? "⭐ " : ""}{p.name}</span>
+                  <span className="text-sm">{Math.max(0, Math.round((buildMap(mapId ?? "cute", diffId ?? "normal").height - 40 - p.y) / 10))}m</span>
                 </li>
               ))}
             </ul>
@@ -493,9 +515,9 @@ function Room() {
             ))}
           </div>
           {isHost ? (
-            <button type="button" onClick={startGame} className="btn-chunky bg-primary text-2xl text-primary-foreground">
+            <Button disabled={!connected} onClick={startGame} className="btn-chunky h-auto bg-primary text-2xl text-primary-foreground">
               게임 시작!
-            </button>
+            </Button>
           ) : (
             <p className="text-xl">방장이 시작하기를 기다리는 중... ⏳</p>
           )}
@@ -506,6 +528,8 @@ function Room() {
         </Overlay>
       )}
 
+      {leaving && <div className="absolute inset-0 z-30 flex items-center justify-center bg-overlay p-4"><div role="dialog" aria-modal="true" aria-labelledby="leave-title" className="card-chunky max-w-sm p-6 text-center"><h2 id="leave-title" className="text-2xl">서버에서 나갈까요?</h2><p className="mt-2">완주 전에는 기록이 저장되지 않아요.</p><div className="mt-5 flex justify-center gap-3"><Button variant="outline" onClick={() => setLeaving(false)}>계속하기</Button><Button asChild variant="destructive"><Link to="/">나가기</Link></Button></div></div></div>}
+
       {myFinish !== null && (
         <Overlay>
           <h2 className="text-4xl text-primary">🎉 꼭대기 도착! 🎉</h2>
@@ -514,11 +538,12 @@ function Room() {
             {finishers.map((p, i) => (
               <li key={p.id} className="flex justify-between">
                 <span>{["🥇", "🥈", "🥉"][i] ?? `${i + 1}.`} {p.name}</span>
-                <span className="font-display">{formatTime(p.finishTime!)}</span>
+                <span className="font-display">{formatTime(p.finishTime ?? 0)}</span>
               </li>
             ))}
           </ol>
-          <p className="mt-3 text-sm text-muted-foreground">게임 종료! 다른 친구들의 기록도 계속 올라와요.</p>
+          {recordError && <p role="alert" className="mt-3 text-destructive">기록을 저장하지 못했어요. 이 화면에서 기록을 확인해 주세요.</p>}
+           <p className="mt-3 text-sm text-muted-foreground">게임 종료! 다른 친구들의 기록도 계속 올라와요.</p>
           <Link to="/" className="btn-chunky mt-5 inline-block bg-secondary text-xl text-secondary-foreground">처음으로</Link>
         </Overlay>
       )}
@@ -527,30 +552,30 @@ function Room() {
 }
 
 function TouchBtn({ label, big, onHold, onTap }: { label: string; big?: boolean; onHold?: (down: boolean) => void; onTap?: () => void }) {
-  const cls = `btn-chunky select-none bg-card/90 font-display ${big ? "h-24 w-24 text-4xl" : "h-16 w-16 text-2xl"}`;
+  const cls = `btn-chunky touch-none select-none bg-card/90 text-card-foreground font-display ${big ? "h-24 w-24 text-4xl" : "h-16 w-16 text-2xl"}`;
   if (onTap) {
     return (
-      <button type="button" className={cls} style={{ touchAction: "none" }}
+      <Button variant="outline" type="button" aria-label={label === "◀" ? "왼쪽 이동" : label === "▶" ? "오른쪽 이동" : label === "👊" ? "밀치기" : "점프"} className={cls}
         onPointerDown={(e) => { e.preventDefault(); onTap(); }}>
         {label}
-      </button>
+      </Button>
     );
   }
   return (
-    <button type="button" className={cls} style={{ touchAction: "none" }}
+    <Button variant="outline" type="button" aria-label={label === "◀" ? "왼쪽 이동" : label === "▶" ? "오른쪽 이동" : label === "👊" ? "밀치기" : "점프"} className={cls}
       onPointerDown={(e) => { e.preventDefault(); (e.target as HTMLElement).setPointerCapture?.(e.pointerId); onHold?.(true); }}
       onPointerUp={() => onHold?.(false)}
       onPointerCancel={() => onHold?.(false)}
       onLostPointerCapture={() => onHold?.(false)}>
       {label}
-    </button>
+    </Button>
   );
 }
 
 function Overlay({ children }: { children: React.ReactNode }) {
   return (
     <div className="absolute inset-0 flex items-center justify-center bg-overlay p-4">
-      <div className="card-chunky max-w-lg p-8 text-center">{children}</div>
+      <div className="card-chunky max-h-[85dvh] w-full max-w-lg overflow-y-auto p-5 text-center sm:p-8">{children}</div>
     </div>
   );
 }

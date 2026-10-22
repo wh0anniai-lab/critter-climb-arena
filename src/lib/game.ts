@@ -84,10 +84,10 @@ export function buildMap(id: MapId, diff: DiffId = "normal"): MapData {
   let px = WORLD_W / 2;
   for (let i = 1; i <= cfg.levels; i++) {
     const w = i === cfg.levels ? 220 : cfg.wBase + r() * cfg.wVar - Math.min(i, 30);
-    let nx = px + (r() * 2 - 1) * (diff === "hard" ? 260 : 230);
+    let nx = px + (r() * 2 - 1) * 110;
     if (Math.abs(nx - px) < 70) nx = px + (nx >= px ? 90 : -90);
     nx = Math.max(w / 2 + 10, Math.min(WORLD_W - w / 2 - 10, nx));
-    if (i === cfg.levels) nx = WORLD_W / 2;
+    if (i === cfg.levels) nx = Math.max(px - 110, Math.min(px + 110, WORLD_W / 2));
     platforms.push({
       x: nx - w / 2,
       y: height - 40 - i * cfg.gap,

@@ -102,3 +102,5 @@
 
 @keyframes floaty { 0%,100% { transform: translateY(0) } 50% { transform: translateY(-8px) } }
 .animate-floaty { animation: floaty 2.4s ease-in-out infinite; }
+
+@media (prefers-reduced-motion: reduce) { .animate-floaty { animation: none; } .pick, .btn-chunky { transition: none; } }
