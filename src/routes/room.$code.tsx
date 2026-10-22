@@ -173,8 +173,9 @@ function Room() {
     const map: MapData = buildMap(mapId, diffId);
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
+    const context = canvas.getContext("2d");
+    if (!context) return;
+    const ctx: CanvasRenderingContext2D = context;
     const scenery = new Image();
     scenery.src = MAP_IMAGES[mapId];
     const keys = new Set<string>();
@@ -291,14 +292,13 @@ function Room() {
               setMyFinish(time);
               metaRef.current = { ...metaRef.current, finishTime: time };
               channelRef.current?.track(metaRef.current);
-              const db = supabase as unknown as { from: (t: string) => { insert: (v: Record<string, unknown>) => Promise<unknown> } };
-              void db.from("records").insert({
+              void supabase.from("records").insert({
                 name: search.name,
                 char: search.char,
                 map: map.id,
                 diff: map.diff,
                 time_ms: time,
-              });
+              }).then(({ error }) => { if (error) setRecordError(true); });
             }
             break;
           }
@@ -464,7 +464,8 @@ function Room() {
               {liveRanks.slice(0, 5).map((p, i) => (
                 <li key={p.id} className="flex gap-1">
                   <span>{["🥇", "🥈", "🥉"][i] ?? `${i + 1}.`}</span>
-                  <span className="truncate">{p.id === myId ? "⭐ " : ""}{p.name}</span>
+                  <span className="min-w-0 flex-1 truncate">{p.id === myId ? "⭐ " : ""}{p.name}</span>
+                  <span className="text-sm">{Math.max(0, Math.round((buildMap(mapId ?? "cute", diffId ?? "normal").height - 40 - p.y) / 10))}m</span>
                 </li>
               ))}
             </ul>
