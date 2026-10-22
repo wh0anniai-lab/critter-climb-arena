@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildMap, MAX_PUSHES } from '@/lib/game';
+import { buildMap, MAX_PUSHES, MAPS, DIFFICULTIES } from '@/lib/game';
 import { checkName } from '@/lib/name-rules';
 
 describe('점프맵 rules', () => {
@@ -17,5 +17,16 @@ describe('점프맵 rules', () => {
     expect(buildMap('jelly', 'easy').platforms.length).toBe(25);
     expect(buildMap('jelly', 'normal').platforms.length).toBe(43);
     expect(buildMap('jelly', 'hard').platforms.length).toBe(57);
+  });
+  it('keeps every next platform within jumping distance in all modes', () => {
+    for (const map of MAPS) for (const diff of DIFFICULTIES) {
+      const platforms = buildMap(map.id, diff.id).platforms;
+      for (let i = 2; i < platforms.length; i++) {
+        const previous = platforms[i - 1];
+        const next = platforms[i];
+        if (!previous || !next) throw new Error('Missing platform');
+        expect(Math.max(0, next.x - (previous.x + previous.w), previous.x - (next.x + next.w))).toBeLessThanOrEqual(110);
+      }
+    }
   });
 });
