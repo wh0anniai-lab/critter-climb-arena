@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { useSuspenseQuery } from "@tanstack/react-query";
+import { useQuery, useSuspenseQuery } from "@tanstack/react-query";
 import { LogIn, Plus, Trophy, RefreshCw } from "lucide-react";
 import { CHARACTERS, MAPS, DIFFICULTIES, formatTime, type CharId, type DiffId, type MapId } from "@/lib/game";
 import { CharacterPreview } from "@/components/CharacterPreview";
@@ -8,6 +8,10 @@ import { Button } from "@/components/ui/button";
 import { MAP_IMAGES } from "@/lib/map-images";
 import { checkName } from "@/lib/name-rules";
 import { recordsQuery } from "@/lib/records-query";
+import { rankByMode, moderatedName } from '@/lib/leaderboard';
+import { warningsQuery } from '@/lib/moderation-query';
+import { supabase } from '@/integrations/supabase/client';
+import { CreatorControls, DeleteRecordButton, useCreator } from '@/components/CreatorControls';
 
 export const Route = createFileRoute("/")({
   loader: ({ context }) => context.queryClient.ensureQueryData(recordsQuery),
@@ -35,6 +39,20 @@ function Index() {
   const [warnings, setWarnings] = useState(0);
   const [warning, setWarning] = useState("");
   const [recordView, setRecordView] = useState<'best' | 'recent'>('best');
+  const [rankMode, setRankMode] = useState<DiffId>('easy');
+  const { isCreator } = useCreator();
+  const { data: globalWarnings } = useQuery(warningsQuery);
+
+  useEffect(() => {
+    const count = globalWarnings?.find(entry => entry.name === name.trim())?.warnings ?? 0;
+    if (count > 0) setWarning(count >= 3 ? '제작자 경고 3번! 이름이 익명으로 고정되었어요.' : `제작자 이름 경고 ${count}/3`);
+    if (count >= 3) {
+      setWarnings(3);
+      setName('익명');
+      localStorage.setItem('jump-warnings', '3');
+      localStorage.setItem('jump-name', '익명');
+    }
+  }, [globalWarnings, name]);
 
   useEffect(() => {
     const count = Math.min(3, Math.max(0, Number(localStorage.getItem('jump-warnings')) || 0));
@@ -44,9 +62,12 @@ function Index() {
     if (CHARACTERS.some(c => c.id === saved)) setChar(saved as CharId);
   }, []);
 
-  const enter = (host: boolean) => {
+  const enter = async (host: boolean) => {
     if (!host && !code.trim()) return;
-    const result = checkName(name, warnings);
+    const { data: global, error } = await supabase.from('nickname_warnings').select('warnings').eq('name', name.trim()).maybeSingle();
+    if (error) { setWarning('이름 경고를 확인하지 못했어요. 다시 시도해 주세요.'); return; }
+    const count = global?.warnings ?? 0;
+    const result = checkName(moderatedName(name, count), Math.max(warnings, count >= 3 ? 3 : 0));
     setWarnings(result.warnings);
     localStorage.setItem('jump-warnings', String(result.warnings));
     if (!result.accepted) {
@@ -58,8 +79,7 @@ function Index() {
     localStorage.setItem('jump-char', char);
     void navigate({ to: '/room/$code', params: { code: host ? String(Math.floor(1000 + Math.random() * 9000)) : code.trim() }, search: { name: result.name, char, host, map, diff } });
   };
-  const filtered = records.filter(r => r.map === map && r.diff === diff);
-  const ranked = recordView === 'best' ? [...filtered].sort((a, b) => a.time_ms - b.time_ms) : filtered;
+  const ranked = rankByMode(records, rankMode, recordView);
   const modeName = (id: string) => id === 'easy' ? '이지모드' : id === 'hard' ? '어려운 모드' : '보통모드';
 
   return (
@@ -94,12 +114,13 @@ function Index() {
       </div>
 
       <section className="mt-9 border-t-2 border-border/20 pt-6">
+        <div className="mb-4"><CreatorControls /></div>
         <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="flex items-center gap-2 text-2xl"><Trophy className="text-primary" />다른 사람의 기록 · 랭킹</h2><Button variant="outline" size="icon" aria-label="기록 새로고침" title="기록 새로고침" disabled={isFetching} onClick={() => void refetch()}><RefreshCw /></Button></div>
-        <p className="mt-1 text-muted-foreground">{MAPS.find(m => m.id === map)?.name} · {modeName(diff)}</p>
+        <div className="mt-3 flex flex-wrap gap-2">{DIFFICULTIES.map(mode => <Button key={mode.id} variant={rankMode === mode.id ? 'secondary' : 'outline'} aria-pressed={rankMode === mode.id} onClick={() => setRankMode(mode.id)}>{modeName(mode.id)}</Button>)}</div>
         <div className="my-3 flex gap-2"><Button variant={recordView === 'best' ? 'secondary' : 'outline'} aria-pressed={recordView === 'best'} onClick={() => setRecordView('best')}>최고 기록</Button><Button variant={recordView === 'recent' ? 'secondary' : 'outline'} aria-pressed={recordView === 'recent'} onClick={() => setRecordView('recent')}>최근 기록</Button></div>
-        {ranked.length === 0 ? <p className="border-y border-border/20 py-6 text-center text-muted-foreground">아직 이 배경과 모드의 완주 기록이 없어요.</p> : <ol className="divide-y divide-border/20">{ranked.slice(0, 20).map((r, i) => <li key={r.id} className="flex items-center gap-3 py-3"><span className="w-9 text-center font-display text-xl">{recordView === 'best' ? ['🥇', '🥈', '🥉'][i] ?? i + 1 : '🏁'}</span><span className="min-w-0 flex-1 truncate text-xl">{r.name}</span><span className="hidden text-muted-foreground sm:block">{new Date(r.created_at).toISOString().slice(0, 10)}</span><span className="font-display text-xl text-primary">{formatTime(r.time_ms)}</span></li>)}</ol>}
+        {ranked.length === 0 ? <p className="border-y border-border/20 py-6 text-center text-muted-foreground">아직 이 모드의 완주 기록이 없어요.</p> : <ol className="divide-y divide-border/20">{ranked.slice(0, 20).map((r, i) => <li key={r.id} className="flex items-center gap-3 py-3"><span className="w-9 text-center font-display text-xl">{recordView === 'best' ? ['🥇', '🥈', '🥉'][i] ?? i + 1 : '🏁'}</span><span className="min-w-0 flex-1 truncate text-xl">{r.name}</span><span className="hidden text-muted-foreground sm:block">{new Date(r.created_at).toISOString().slice(0, 10)}</span><span className="font-display text-xl text-primary">{formatTime(r.time_ms)}</span>{isCreator && <DeleteRecordButton id={r.id} />}</li>)}</ol>}
         <h3 className="mt-5 text-lg">전체 배경의 최근 완주</h3>
-        {records.length === 0 ? <p className="py-3 text-muted-foreground">첫 번째 완주 기록을 기다리고 있어요!</p> : <ul className="divide-y divide-border/20">{records.slice(0, 8).map(r => <li key={r.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2"><span className="min-w-0 truncate font-display">{r.name}</span><span className="text-sm text-muted-foreground">{MAPS.find(m => m.id === r.map)?.name} · {modeName(r.diff)}</span><span className="ml-auto font-display text-primary">{formatTime(r.time_ms)}</span></li>)}</ul>}
+        {records.length === 0 ? <p className="py-3 text-muted-foreground">첫 번째 완주 기록을 기다리고 있어요!</p> : <ul className="divide-y divide-border/20">{records.slice(0, 8).map(r => <li key={r.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2"><span className="min-w-0 truncate font-display">{r.name}</span><span className="text-sm text-muted-foreground">{modeName(r.diff)}</span><span className="ml-auto font-display text-primary">{formatTime(r.time_ms)}</span>{isCreator && <DeleteRecordButton id={r.id} />}</li>)}</ul>}
       </section>
     </main>
   );
