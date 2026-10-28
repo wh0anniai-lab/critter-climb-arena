@@ -25,6 +25,9 @@ import { CharacterPreview } from "@/components/CharacterPreview";
 import { Button } from "@/components/ui/button";
 import { LogOut } from "lucide-react";
 import { MAP_IMAGES } from "@/lib/map-images";
+import { useQuery } from '@tanstack/react-query';
+import { warningsQuery } from '@/lib/moderation-query';
+import { moderatedName } from '@/lib/leaderboard';
 
 const CHAR_IDS: CharId[] = ["cat", "dog", "hamster", "alien", "capybara", "axolotl", "rabbit"];
 const MAP_IDS: MapId[] = ["cute", "spooky", "jelly", "choco", "forest", "sea"];
@@ -83,6 +86,24 @@ function Room() {
   const [connected, setConnected] = useState(false);
   const [leaving, setLeaving] = useState(false);
   const [recordError, setRecordError] = useState(false);
+  const { data: globalWarnings } = useQuery(warningsQuery);
+  const globalCounts = useRef(new Map<string, number>());
+  const [nameWarning, setNameWarning] = useState('');
+  const forcedAnonymous = useRef(false);
+  const displayName = (name: string) => moderatedName(name, globalCounts.current.get(name) ?? 0);
+
+  useEffect(() => {
+    globalCounts.current = new Map(globalWarnings?.map(entry => [entry.name, entry.warnings]) ?? []);
+    const count = globalCounts.current.get(search.name) ?? 0;
+    if (count > 0) setNameWarning(count >= 3 ? '제작자 경고 3번! 이름이 익명으로 고정되었어요.' : `제작자 이름 경고 ${count}/3`);
+    if (count >= 3 && !forcedAnonymous.current) {
+      forcedAnonymous.current = true;
+      localStorage.setItem('jump-warnings', '3');
+      localStorage.setItem('jump-name', '익명');
+      metaRef.current = { ...metaRef.current, name: '익명' };
+      void channelRef.current?.track(metaRef.current);
+    }
+  }, [globalWarnings, search.name]);
 
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const metaRef = useRef<Meta>({
@@ -293,7 +314,7 @@ function Room() {
               metaRef.current = { ...metaRef.current, finishTime: time };
               channelRef.current?.track(metaRef.current);
               void supabase.from("records").insert({
-                name: search.name,
+                name: displayName(search.name),
                 char: search.char,
                 map: map.id,
                 diff: map.diff,
@@ -344,10 +365,10 @@ function Room() {
         ctx.globalAlpha = 0.9;
         drawCharacter(ctx, m.char, r.x, r.y, PLAYER_SIZE, r.facing, t, r.moving);
         ctx.globalAlpha = 1;
-        label(m.name, r.x, r.y - PLAYER_SIZE - 14, false);
+        label(displayName(m.name), r.x, r.y - PLAYER_SIZE - 14, false);
       }
       drawCharacter(ctx, search.char, me.x, me.y, PLAYER_SIZE, me.facing, t, me.moving && me.onGround);
-      label(search.name + " (나)", me.x, me.y - PLAYER_SIZE - 14, true);
+      label(displayName(search.name) + " (나)", me.x, me.y - PLAYER_SIZE - 14, true);
 
       for (const e of effects) {
         e.t += 1 / 60;
@@ -453,18 +474,19 @@ function Room() {
     <main className="relative h-dvh w-full overflow-hidden touch-none">
       <canvas ref={canvasRef} aria-label="점프맵 경주 화면" className="block h-full w-full" />
       <Button variant="outline" onClick={() => setLeaving(true)} className="btn-chunky absolute left-3 top-24 z-10 h-auto bg-card text-base"><LogOut />나가기</Button>
+      {nameWarning && <p role="alert" className="absolute bottom-32 left-3 right-12 z-10 rounded-lg bg-card p-2 text-center text-destructive">{nameWarning}</p>}
 
       <div className="card-chunky absolute right-12 top-3 max-h-[40dvh] w-40 overflow-y-auto p-3 text-base sm:w-56">
         <div className="font-display text-lg">서버 <span className="text-primary">{code}</span></div>
         <div className="text-sm text-muted-foreground">{mapInfo?.name ?? "..."} · {diffInfo?.name ?? ""} · {players.length}명</div>
         {startAt && !myFinish && liveRanks.length > 0 && (
           <>
-            <div className="mt-2 font-display">🏁 실시간 순위</div>
+            <div className="mt-2 font-display">📏 실시간 높이 기록</div>
             <ul className="mt-1 space-y-1">
               {liveRanks.slice(0, 5).map((p, i) => (
                 <li key={p.id} className="flex gap-1">
                   <span>{["🥇", "🥈", "🥉"][i] ?? `${i + 1}.`}</span>
-                  <span className="min-w-0 flex-1 truncate">{p.id === myId ? "⭐ " : ""}{p.name}</span>
+                  <span className="min-w-0 flex-1 truncate">{p.id === myId ? "⭐ " : ""}{displayName(p.name)}</span>
                   <span className="text-sm">{Math.max(0, Math.round((buildMap(mapId ?? "cute", diffId ?? "normal").height - 40 - p.y) / 10))}m</span>
                 </li>
               ))}
@@ -474,7 +496,7 @@ function Room() {
         <ul className="mt-2 space-y-1">
           {players.map((p) => (
             <li key={p.id} className="flex justify-between gap-2">
-              <span className="truncate">{p.id === myId ? "⭐ " : ""}{p.name}</span>
+              <span className="truncate">{p.id === myId ? "⭐ " : ""}{displayName(p.name)}</span>
               {typeof p.finishTime === "number" && <span className="font-display text-primary">{formatTime(p.finishTime)}</span>}
             </li>
           ))}
@@ -510,7 +532,7 @@ function Room() {
             {players.map((p) => (
               <div key={p.id} className="flex flex-col items-center">
                 <CharacterPreview char={p.char} size={64} />
-                <span>{p.name}{p.host ? " 👑" : ""}</span>
+                <span>{displayName(p.name)}{p.host ? " 👑" : ""}</span>
               </div>
             ))}
           </div>
@@ -537,7 +559,7 @@ function Room() {
           <ol className="mx-auto mt-4 max-w-xs space-y-1 text-left text-xl">
             {finishers.map((p, i) => (
               <li key={p.id} className="flex justify-between">
-                <span>{["🥇", "🥈", "🥉"][i] ?? `${i + 1}.`} {p.name}</span>
+                <span>{["🥇", "🥈", "🥉"][i] ?? `${i + 1}.`} {displayName(p.name)}</span>
                 <span className="font-display">{formatTime(p.finishTime ?? 0)}</span>
               </li>
             ))}
