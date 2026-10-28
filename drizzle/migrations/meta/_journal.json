@@ -8,6 +8,13 @@
       "when": 1792633068047,
       "tag": "0000_create_race_records",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1793167229097,
+      "tag": "0001_creator_moderation",
+      "breakpoints": true
     }
   ]
 }
