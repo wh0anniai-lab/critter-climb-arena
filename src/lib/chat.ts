@@ -16,7 +16,7 @@ export function chatName(raw: string) {
 
 export function receiveRoomMessage(raw: unknown, members: readonly { id: string; name: string }[]): RoomMessage | null {
   if (!raw || typeof raw !== 'object') return null;
-  const value = raw as Record<string, unknown>;
+  const value = raw as { playerId?: unknown; id?: unknown; body?: unknown; created_at?: unknown };
   const member = members.find(p => p.id === value.playerId);
   if (!member || typeof value.id !== 'string' || value.id.length > 80 || typeof value.body !== 'string' || typeof value.created_at !== 'string' || !Number.isFinite(Date.parse(value.created_at))) return null;
   const body = chatBody(value.body);
