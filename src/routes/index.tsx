@@ -84,6 +84,7 @@ function Index() {
 
   return (
     <main className="mx-auto max-w-6xl px-4 py-7 sm:px-6">
+      <div className="mb-4 flex justify-end"><CreatorControls /></div>
       <header className="mb-7 flex items-center justify-between gap-4 border-b-2 border-border/20 pb-5">
         <div><h1 className="text-5xl text-primary sm:text-6xl">점프맵</h1><p className="mt-1 text-lg text-muted-foreground">친구들과 함께, 꼭대기까지! 🏁</p></div>
         <div className="hidden sm:block"><CharacterPreview char="capybara" size={90} /></div>
@@ -114,7 +115,6 @@ function Index() {
       </div>
 
       <section className="mt-9 border-t-2 border-border/20 pt-6">
-        <div className="mb-4"><CreatorControls /></div>
         <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="flex items-center gap-2 text-2xl"><Trophy className="text-primary" />다른 사람의 기록 · 랭킹</h2><Button variant="outline" size="icon" aria-label="기록 새로고침" title="기록 새로고침" disabled={isFetching} onClick={() => void refetch()}><RefreshCw /></Button></div>
         <div className="mt-3 flex flex-wrap gap-2">{DIFFICULTIES.map(mode => <Button key={mode.id} variant={rankMode === mode.id ? 'secondary' : 'outline'} aria-pressed={rankMode === mode.id} onClick={() => setRankMode(mode.id)}>{modeName(mode.id)}</Button>)}</div>
         <div className="my-3 flex gap-2"><Button variant={recordView === 'best' ? 'secondary' : 'outline'} aria-pressed={recordView === 'best'} onClick={() => setRecordView('best')}>최고 기록</Button><Button variant={recordView === 'recent' ? 'secondary' : 'outline'} aria-pressed={recordView === 'recent'} onClick={() => setRecordView('recent')}>최근 기록</Button></div>
