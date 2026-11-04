@@ -28,6 +28,8 @@ import { MAP_IMAGES } from "@/lib/map-images";
 import { useQuery } from '@tanstack/react-query';
 import { warningsQuery } from '@/lib/moderation-query';
 import { moderatedName } from '@/lib/leaderboard';
+import { RoomChat } from '@/components/ChatPanel';
+import { appendChat, chatName, isTypingTarget, receiveRoomMessage, type ChatMessage, type RoomMessage } from '@/lib/chat';
 
 const CHAR_IDS: CharId[] = ["cat", "dog", "hamster", "alien", "capybara", "axolotl", "rabbit"];
 const MAP_IDS: MapId[] = ["cute", "spooky", "jelly", "choco", "forest", "sea"];
@@ -86,6 +88,7 @@ function Room() {
   const [connected, setConnected] = useState(false);
   const [leaving, setLeaving] = useState(false);
   const [recordError, setRecordError] = useState(false);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const { data: globalWarnings } = useQuery(warningsQuery);
   const globalCounts = useRef(new Map<string, number>());
   const [nameWarning, setNameWarning] = useState('');
@@ -132,6 +135,7 @@ function Room() {
       config: { presence: { key: myId }, broadcast: { self: false } },
     });
     channelRef.current = ch;
+    setChatMessages([]);
     ch.on("presence", { event: "sync" }, () => {
       const state = ch.presenceState();
       const list: Meta[] = Object.values(state).map((arr) => arr[0] as unknown as Meta | undefined).filter((m): m is Meta => !!m);
@@ -160,6 +164,11 @@ function Room() {
       const p = payload as { target: string; dir: number };
       if (p.target === myId) pushedRef.current = { dir: p.dir };
     });
+    ch.on('broadcast', { event: 'chat' }, ({ payload }) => {
+      const members = Object.values(ch.presenceState()).flat().map(value => value as unknown as Meta);
+      const message = receiveRoomMessage(payload, members);
+      if (message) setChatMessages(current => appendChat(current, { ...message, name: displayName(message.name) }));
+    });
     ch.subscribe(async (status) => {
       if (status === "SUBSCRIBED") {
         setConnected(true);
@@ -167,6 +176,7 @@ function Room() {
       }
     });
     return () => {
+      channelRef.current = null;
       supabase.removeChannel(ch);
     };
   }, [code, myId]);
@@ -177,6 +187,15 @@ function Room() {
     const t = setTimeout(() => setNotFound(true), 5000);
     return () => clearTimeout(t);
   }, [search.host, mapId]);
+
+  const sendChat = async (body: string) => {
+    const channel = channelRef.current;
+    if (!channel || !connected || !players.some(player => player.id === myId)) throw new Error('Not in room');
+    const message: RoomMessage = { id: crypto.randomUUID(), playerId: myId, name: chatName(displayName(metaRef.current.name)), body, created_at: new Date().toISOString() };
+    const result = await channel.send({ type: 'broadcast', event: 'chat', payload: message });
+    if (result !== 'ok') throw new Error('Chat send failed');
+    setChatMessages(current => appendChat(current, message));
+  };
 
   const startGame = async () => {
     if (!search.host || !connected || startRef.current !== null) return;
@@ -220,13 +239,16 @@ function Room() {
     let camY = map.height;
 
     const kd = (e: KeyboardEvent) => {
+      if (isTypingTarget(e.target)) { keys.clear(); return; }
       if (["Space", "KeyA", "KeyS", "KeyD"].includes(e.code)) e.preventDefault();
       keys.add(e.code);
       if (e.code === "KeyA" && !e.repeat) tryPush();
     };
     const ku = (e: KeyboardEvent) => keys.delete(e.code);
+    const clearKeys = () => keys.clear();
     window.addEventListener("keydown", kd);
     window.addEventListener("keyup", ku);
+    window.addEventListener('blur', clearKeys);
     keysRef.current = keys;
     pushFnRef.current = tryPush;
     const rankTimer = window.setInterval(() => {
@@ -450,6 +472,7 @@ function Room() {
       cancelAnimationFrame(raf);
       window.removeEventListener("keydown", kd);
       window.removeEventListener("keyup", ku);
+      window.removeEventListener('blur', clearKeys);
       window.clearInterval(rankTimer);
       keysRef.current = null;
       pushFnRef.current = null;
@@ -569,6 +592,7 @@ function Room() {
           <Link to="/" className="btn-chunky mt-5 inline-block bg-secondary text-xl text-secondary-foreground">처음으로</Link>
         </Overlay>
       )}
+      {!notFound && !leaving && <RoomChat messages={chatMessages} ready={connected && players.some(player => player.id === myId)} onSend={sendChat} onFocus={() => keysRef.current?.clear()} />}
     </main>
   );
 }

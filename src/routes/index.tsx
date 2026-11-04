@@ -12,6 +12,7 @@ import { rankByMode, moderatedName } from '@/lib/leaderboard';
 import { warningsQuery } from '@/lib/moderation-query';
 import { supabase } from '@/integrations/supabase/client';
 import { CreatorControls, DeleteRecordButton, useCreator } from '@/components/CreatorControls';
+import { CommunityChat } from '@/components/ChatPanel';
 
 export const Route = createFileRoute("/")({
   loader: ({ context }) => context.queryClient.ensureQueryData(recordsQuery),
@@ -113,6 +114,8 @@ function Index() {
           <section><h2 className="mb-3 text-2xl">📜 게임 규칙</h2><ul className="space-y-2 text-lg"><li>🏁 꼭대기에 가장 빨리 도착하면 승리!</li><li>👑 방장이 시작을 누르면 모두 함께 출발해요.</li><li>🌱 떨어져도 탈락하지 않아요. 다시 올라가요!</li><li>👊 옆 친구 밀치기는 한 판에 10번이에요.</li><li>💬 나쁜 이름은 경고! 3번이면 익명으로 고정돼요.</li><li>👆 화면의 ◀ ▶ 버튼으로 이동, ⤒로 점프해요.</li><li className="text-base text-muted-foreground">키보드: Space 점프 · S 왼쪽 · D 오른쪽 · A 밀치기</li></ul></section>
         </div>
       </div>
+
+      <CommunityChat name={name} />
 
       <section className="mt-9 border-t-2 border-border/20 pt-6">
         <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="flex items-center gap-2 text-2xl"><Trophy className="text-primary" />다른 사람의 기록 · 랭킹</h2><Button variant="outline" size="icon" aria-label="기록 새로고침" title="기록 새로고침" disabled={isFetching} onClick={() => void refetch()}><RefreshCw /></Button></div>
