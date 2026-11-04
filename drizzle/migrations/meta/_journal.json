@@ -15,6 +15,13 @@
       "when": 1793167229097,
       "tag": "0001_creator_moderation",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1793772084022,
+      "tag": "0002_create_community_chat",
+      "breakpoints": true
     }
   ]
 }

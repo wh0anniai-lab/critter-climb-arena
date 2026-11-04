@@ -14,6 +14,30 @@ export type Database = {
   }
   public: {
     Tables: {
+      community_messages: {
+        Row: {
+          body: string
+          channel: string
+          created_at: string
+          id: string
+          name: string
+        }
+        Insert: {
+          body: string
+          channel: string
+          created_at?: string
+          id?: string
+          name: string
+        }
+        Update: {
+          body?: string
+          channel?: string
+          created_at?: string
+          id?: string
+          name?: string
+        }
+        Relationships: []
+      }
       nickname_warnings: {
         Row: {
           name: string
