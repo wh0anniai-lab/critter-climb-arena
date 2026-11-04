@@ -14,3 +14,4 @@
 - Keep nickname warning logic in a pure helper so the three-warning rule can be tested independently.
 - Store creator roles separately from users; provision the initial creator only after identifying the requester's authenticated account, never through a public passphrase or first-signup promotion.
 - Global moderation is nickname-scoped because players are anonymous; use an atomic admin-only warning RPC, shared warning counts, and an insert trigger to enforce anonymous completion names at three warnings.
+- Persist public community/feedback chat with channel-scoped queries and Realtime; keep ephemeral room chat on the existing room presence channel, accepting messages only from current participants, and ignore game keys while typing.
